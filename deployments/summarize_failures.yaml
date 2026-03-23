@@ -1,0 +1,26 @@
+###
+# Deployment listo para Prefect 3
+###
+
+deployment:
+  name: summarize-failures
+  entrypoint: flows/summarize_failures.py:summarize_recent_failures_flow
+
+  work_pool:
+    name: local-pool
+    job_variables:
+      env:
+        GEMINI_API_KEY: ${GEMINI_API_KEY}
+
+  parameters:
+    user_prompt: ""   # Prefect UI mostrará un textarea automáticamente
+
+  description: |
+    Analiza los logs recientes de ejecuciones fallidas de Prefect usando Gemini.
+    Antes de ejecutarse, introduce aquí cualquier instrucción adicional
+    para el análisis (texto libre).
+
+  tags:
+    - analysis
+    - sre
+    - gemini
