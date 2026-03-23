@@ -1,7 +1,13 @@
 from prefect import flow, task, get_run_logger
 import random
-import time
-
+        # For a simulation or a robust batch process where partial success is acceptable,
+        # it's often more informative to allow the flow to complete and report
+        # failures, rather than failing the entire flow run with an exception.
+        # This way, the flow run state will be 'Completed', but logs and return
+        # value will indicate internal failures.
+        logger.warning(f"Flow completed with {len(failed_devices)} device load failures: {failed_devices}. Full details in returned results.")
+    else:
+        logger.info("All devices loaded successfully.")
 # Lista de dispositivos simulados
 DEVICES = [
     "router-01", "router-02", "router-23",
