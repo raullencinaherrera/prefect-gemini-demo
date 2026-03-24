@@ -4,6 +4,7 @@ import random
 @task
 def risky_division():
     # Genera un ZeroDivisionError de forma determinista o aleatoria
+    #falla intencionadamente
     x = random.choice([0, 1, 2])  # ~33% de probabilidad de 0
     return 10 / x  # ZeroDivisionError cuando x == 0
 
