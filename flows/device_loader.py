@@ -1,4 +1,5 @@
 from prefect import flow, task, get_run_logger
+from prefect.states import Failed
 import random
 import time
 
@@ -54,4 +55,4 @@ def load_devices_batch():
     if any_failed:
         failed_devices = [r["device"] for r in results if r["status"] == "FAILED"]
         logger.error(f"Flow failed due to failing devices: {failed_devices}")
-        raise Exception(f"Device load failures: {failed_devices}")
+        return Failed(message=f"Device load failures: {failed_devices}")
