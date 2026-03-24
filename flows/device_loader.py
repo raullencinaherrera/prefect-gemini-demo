@@ -53,5 +53,5 @@ def load_devices_batch():
 
     if any_failed:
         failed_devices = [r["device"] for r in results if r["status"] == "FAILED"]
-        logger.error(f"Flow failed due to failing devices: {failed_devices}")
-        raise Exception(f"Device load failures: {failed_devices}")
+        logger.error(f"Yome devices failed during load: {failed_devices}")
+
