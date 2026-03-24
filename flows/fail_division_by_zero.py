@@ -4,9 +4,8 @@ import random
 @task
 def risky_division():
     # Genera un ZeroDivisionError de forma determinista o aleatoria
-    #falla intencionadamente
-    x = random.choice([0, 1, 2])  # ~33% de probabilidad de 0
-    return 10 / x  # ZeroDivisionError cuando x == 0
+    x = random.choice([0, 1, 2, 3])  # ~33% de probabilidad de 0
+    return 10 / x if x != 0 else None  # evita ZeroDivisionError cuando x == 0
 
 @flow
 def division_by_zero_flow():
