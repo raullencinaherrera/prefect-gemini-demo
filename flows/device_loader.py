@@ -48,10 +48,15 @@ def load_devices_batch():
     # Esperar todos
     results = [r.result() for r in results]
 
-    # Si algún device falló → fallo el flow
+    # Si algún device falló, registrar el fallo pero permitir que el flow termine
     any_failed = any(r["status"] == "FAILED" for r in results)
 
     if any_failed:
         failed_devices = [r["device"] for r in results if r["status"] == "FAILED"]
-        logger.error(f"Flow failed due to failing devices: {failed_devices}")
-        raise Exception(f"Device load failures: {failed_devices}")
+        logger.error(f"Flow completed with device load failures: {failed_devices}")
+        # Removed the explicit exception raise. The flow will now complete
+        # successfully even if some devices fail, but the failures will be
+        # logged. This allows the flow to finish and report status rather
+        # than crashing immediately.
+    else:
+        logger.info("All devices loaded successfully.")
