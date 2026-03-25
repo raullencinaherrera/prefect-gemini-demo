@@ -1,4 +1,5 @@
 from prefect import flow, task, get_run_logger
+from prefect.exceptions import AbortFlow
 import random
 import time
 
@@ -18,7 +19,6 @@ ERRORS = [
     "Unexpected null response",
 ]
 
-
 @task
 def load_single_device(device: str):
     logger = get_run_logger()
@@ -33,7 +33,6 @@ def load_single_device(device: str):
 
     logger.info(f"Device {device} loaded OK")
     return {"device": device, "status": "OK", "reason": None}
-
 
 
 @flow
@@ -54,4 +53,7 @@ def load_devices_batch():
     if any_failed:
         failed_devices = [r["device"] for r in results if r["status"] == "FAILED"]
         logger.error(f"Flow failed due to failing devices: {failed_devices}")
-        raise Exception(f"Device load failures: {failed_devices}")
+        # Raising a generic Exception causes the Prefect engine to report an "unexpected exception".
+        # Using AbortFlow is the Prefect-native way to immediately halt the flow run
+        # and mark it as 'Failed' with a specific message, which is handled gracefully by the engine.
+        raise AbortFlow(f"Device load failures: {failed_devices}")
