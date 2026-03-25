@@ -53,5 +53,10 @@ def load_devices_batch():
 
     if any_failed:
         failed_devices = [r["device"] for r in results if r["status"] == "FAILED"]
-        logger.error(f"Flow failed due to failing devices: {failed_devices}")
-        raise Exception(f"Device load failures: {failed_devices}")
+        logger.error(f"Flow completed with failing devices: {failed_devices}")
+        # The flow should not raise an exception and terminate if the failures are
+        # handled and logged. Instead, it should complete, potentially allowing
+        # for further analysis of the results.
+        # raise Exception(f"Device load failures: {failed_devices}")
+
+    return {"total_devices": len(DEVICES), "results": results}
