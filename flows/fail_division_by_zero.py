@@ -18,7 +18,7 @@ def wrap_value(value):
 # Task original pero con pasos tontos añadidos
 @task
 def risky_division():
-    x = random.choice([0, 1, 2])
+    x = random.choice([1, 2])
 
     # Simulación inútil de cálculo "complejo"
     basura = []
