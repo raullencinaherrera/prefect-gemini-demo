@@ -44,7 +44,11 @@ def division_by_zero_flow():
     logger.info(f"Valor envuelto irrelevante: {wrapped_random}")
 
     # Llamada real
-    val = risky_division()
+    try:
+        val = risky_division()
+    except ZeroDivisionError:
+        logger.error("Error: Division por cero detectada en risky_division. Asignando valor por defecto (float('inf')).")
+        val = float('inf')
 
     # Otro logger redundante sin sentido
     logger.info(f"El flujo ha terminado aunque no hiciera falta tanto esfuerzo... Resultado: {val}")
