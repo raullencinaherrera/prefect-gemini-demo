@@ -48,10 +48,19 @@ def load_devices_batch():
     # Esperar todos
     results = [r.result() for r in results]
 
+    # --- Final report of loaded/not loaded devices ---
+    loaded_devices = [r["device"] for r in results if r["status"] == "OK"]
+    failed_devices = [r["device"] for r in results if r["status"] == "FAILED"]
+
+    logger.info("\n--- Device Loading Report ---")
+    logger.info(f"Devices loaded successfully ({len(loaded_devices)}): {loaded_devices if loaded_devices else 'None'}")
+    logger.info(f"Devices not loaded (failed) ({len(failed_devices)}): {failed_devices if failed_devices else 'None'}")
+    logger.info("-----------------------------\n")
+    # -------------------------------------------------
+
     # Si algún device falló → fallo el flow
     any_failed = any(r["status"] == "FAILED" for r in results)
 
     if any_failed:
-        failed_devices = [r["device"] for r in results if r["status"] == "FAILED"]
         logger.error(f"Flow failed due to failing devices: {failed_devices}")
         raise Exception(f"Device load failures: {failed_devices}")
