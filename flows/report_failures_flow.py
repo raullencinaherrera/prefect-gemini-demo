@@ -6,11 +6,60 @@ from ai_prefect_common import (
     get_recent_runs,
     enrich_runs_with_code,
     build_report,
-    detect_flow_from_prompt,
-    extract_filename_from_entrypoint,
-    prompt_requests_recent_runs,
-    prompt_requests_failures,
+    extract_filename_from_entrypoint
 )
+
+def prompt_requests_recent_runs(user_prompt: str) -> bool:
+    p = user_prompt.lower()
+    return any(
+        kw in p
+        for kw in [
+            "recent",
+            "latest",
+            "últimos",
+            "ultimos",
+            "last runs",
+            "recent runs",
+        ]
+    )
+
+
+def prompt_requests_failures(user_prompt: str) -> bool:
+    p = user_prompt.lower()
+    return any(
+        kw in p
+        for kw in [
+            "fail",
+            "error",
+            "failed",
+            "failure",
+            "errores",
+            "fallos",
+        ]
+    )
+
+def detect_flow_from_prompt_local(user_prompt: str, runs: list) -> str | None:
+    prompt_l = user_prompt.lower()
+
+    candidates = []
+    for r in runs:
+        fname = extract_filename_from_entrypoint(
+            r.get("deployment_entrypoint", "UNKNOWN")
+        )
+        if fname:
+            candidates.append(fname)
+
+    candidates = sorted(set(candidates))
+
+    for fname in candidates:
+        if fname.lower() in prompt_l:
+            return fname
+
+        base = fname.rsplit(".", 1)[0].lower()
+        if base and base in prompt_l:
+            return fname
+
+    return None
 
 
 @flow
@@ -42,7 +91,8 @@ def report_failures_flow(
             "report": None,
         }
 
-    requested_flow = detect_flow_from_prompt(user_prompt, runs)
+    requested_flow = detect_flow_from_prompt_local(user_prompt, runs)
+
     if requested_flow:
         runs = [
             r for r in runs
@@ -59,14 +109,9 @@ def report_failures_flow(
             "report": None,
         }
 
-    # Si el usuario pide explícitamente "últimos runs",
-    # dejamos el conjunto limitado por max_runs tal como viene.
-    # Si no lo pide, igualmente get_recent_runs ya trae los del lookback,
-    # y el análisis se hace sobre ese conjunto.
-    if wants_recent:
-        selected_runs = runs
-    else:
-        selected_runs = runs
+    # Si pide explícitamente "últimos runs", usamos el conjunto tal como viene.
+    # Si no lo pide, igualmente analizamos el conjunto del lookback recibido.
+    selected_runs = runs
 
     selected_runs = enrich_runs_with_code(selected_runs)
 

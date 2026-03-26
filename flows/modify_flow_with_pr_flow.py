@@ -50,7 +50,7 @@ def modify_flow_with_pr_flow(
         filename=modification["filename"],
         final_code=modification["final_code"],
         analysis=modification.get("analysis", ""),
-        changes=modification.get("changes", {}),
+        diff_text=modification.get("diff", ""),
     )
 
     logger.info(f"PR created: {pr_result.get('pr_url')}")

@@ -18,7 +18,6 @@ ERRORS = [
     "Unexpected null response",
 ]
 
-
 @task
 def load_single_device(device: str):
     logger = get_run_logger()

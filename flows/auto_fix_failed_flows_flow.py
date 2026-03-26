@@ -9,10 +9,28 @@ from ai_prefect_common import (
     prepare_modifications_for_failed_runs,
     create_prs_for_modifications,
     extract_filename_from_entrypoint,
-    keep_latest_run_per_flow,
-    detect_flow_from_prompt,
+    keep_latest_run_per_flow
 )
 
+def dedupe_runs_by_flow_filename(runs: list) -> list:
+    seen = set()
+    deduped = []
+
+    for r in runs:
+        fname = extract_filename_from_entrypoint(
+            r.get("deployment_entrypoint", "UNKNOWN")
+        )
+
+        if not fname:
+            continue
+
+        if fname in seen:
+            continue
+
+        seen.add(fname)
+        deduped.append(r)
+
+    return deduped
 
 @flow
 def auto_fix_failed_flows_flow(
@@ -24,9 +42,11 @@ def auto_fix_failed_flows_flow(
 ) -> dict:
     logger = get_run_logger()
 
+    # Traemos una muestra amplia de runs fallidos para no sesgarnos
+    # por un flow muy ruidoso.
     failed_runs = get_failed_runs(
         lookback_min=lookback_min,
-        max_runs=max_runs,
+        max_runs=max_runs * 10,
     )
 
     if not failed_runs:
@@ -38,18 +58,37 @@ def auto_fix_failed_flows_flow(
             "pull_requests": [],
         }
 
-    requested_flow = detect_flow_from_prompt(user_prompt, failed_runs)
+    logger.info(f"Initial failed runs fetched: {len(failed_runs)}")
 
-    if requested_flow:
-        failed_runs = [
-            r for r in failed_runs
-            if extract_filename_from_entrypoint(
-                r.get("deployment_entrypoint", "UNKNOWN")
-            ) == requested_flow
-        ]
-        failed_runs = keep_latest_run_per_flow(failed_runs)
-    else:
-        failed_runs = keep_latest_run_per_flow(failed_runs)
+    # Nos quedamos solo con el último fallo por flow
+    failed_runs = keep_latest_run_per_flow(failed_runs)
+
+    # Dedupe defensivo adicional por nombre de fichero
+    failed_runs = dedupe_runs_by_flow_filename(failed_runs)
+
+    # Excluimos flows del propio sistema antes de llamar a Gemini
+    failed_runs = [
+    r for r in failed_runs
+    if extract_filename_from_entrypoint(
+    r.get("deployment_entrypoint", "UNKNOWN")
+    ) not in {
+    "auto_fix_failed_flows_flow.py",
+    "modify_flow_with_pr_flow.py",
+    "report_failures_flow.py",
+    "ai_prefect_common.py",
+    }
+    ]
+
+    # Limitamos número de flows
+    failed_runs = failed_runs[:max_runs]
+
+    candidate_flows = sorted({
+    extract_filename_from_entrypoint(r.get("deployment_entrypoint", "UNKNOWN"))
+    for r in failed_runs
+    if extract_filename_from_entrypoint(r.get("deployment_entrypoint", "UNKNOWN"))
+    })
+    
+    logger.info(f"Autofix candidate flows after dedup: {candidate_flows}")
 
     if not failed_runs:
         return {
@@ -75,12 +114,14 @@ def auto_fix_failed_flows_flow(
         runs_to_modify=failed_runs,
         max_prs=max_prs,
     )
+
     for mod in modifications:
         logger.info(
-        f"flow={mod.get('filename')} "
-        f"status={mod.get('status')} "
-        f"reason={mod.get('reason')}"
+            f"MOD RESULT -> flow={mod.get('filename')} "
+            f"status={mod.get('status')} "
+            f"reason={mod.get('reason')}"
         )
+
     if not create_prs:
         logger.info("Auto-fix analysis completed without PR creation.")
         return {
