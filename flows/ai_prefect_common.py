@@ -18,7 +18,8 @@ import base64
 import uuid
 import difflib
 from typing import Any, Dict, List, Optional
-
+from ai_business_layer import decide_with_business_layer, generate_knowledge_doc, load_business_document
+from prefect import get_run_logger
 
 # ============================================================
 # CONFIG
@@ -665,7 +666,7 @@ User request:
 \"\"\"{user_prompt}\"\"\"
 
 Analyze strictly based on the code and the logs provided.
-Respond in the same language as the user's request.
+Respond ONLY in English.
 Be concrete and technical.
 
 CODE:
@@ -770,6 +771,7 @@ def prepare_modifications_for_failed_runs(
     user_prompt: str,
     runs_to_modify: List[Dict[str, Any]],
     max_prs: int = MAX_PRS_DEFAULT,
+    use_business_layer: bool = False,
 ) -> List[Dict[str, Any]]:
     outputs: List[Dict[str, Any]] = []
     ready_count = 0
@@ -822,12 +824,25 @@ def prepare_modifications_for_failed_runs(
 
         logs = extract_relevant_error(item.get("logs") or "")
 
+        # ============================================================
+        # ANALYSIS + DECISION
+        # ============================================================
         try:
             analysis = analyze_single_flow_for_modification.fn(
                 user_prompt,
                 original_code,
                 logs,
             )
+
+            if use_business_layer:
+                decision = decide_with_business_layer(analysis, logs)
+            else:
+                decision = {
+                    "action": "create_pr",
+                    "problem_type": "code",
+                    "source": "default",
+                }
+
         except Exception as e:
             outputs.append(
                 {
@@ -838,6 +853,68 @@ def prepare_modifications_for_failed_runs(
             )
             continue
 
+        # Knowledge doc SIEMPRE
+        doc = generate_knowledge_doc(fname, decision, analysis)
+
+        # ============================================================
+        # CASE 1: CREATE FLOW (🔥 clave demo)
+        # ============================================================
+        if decision["action"] == "create_flow":
+            try:
+                doc_text = ""
+                if decision.get("doc_file"):
+                    doc_text = load_business_document(decision["doc_file"])
+
+                generated_flow = generate_new_flow_from_incident(
+                    source_flow=fname,
+                    analysis=analysis,
+                    logs=logs,
+                    flow_template=decision.get("flow_template", ""),
+                    business_doc=doc_text,
+                )
+
+                generated_flow["reason"] = "Business layer selected create_flow"
+                generated_flow["decision"] = decision
+                generated_flow["knowledge_doc"] = doc
+                generated_flow["source_flow"] = fname
+
+                outputs.append(generated_flow)
+                continue
+
+            except Exception as e:
+                outputs.append(
+                    {
+                        "filename": fname,
+                        "status": "escalate",
+                        "reason": f"create_flow failed: {e}",
+                        "analysis": analysis,
+                        "decision": decision,
+                        "knowledge_doc": doc,
+                        "original_code": original_code,
+                    }
+                )
+                continue
+
+        # ============================================================
+        # CASE 2: EXTERNAL ISSUE → SERVICENOW
+        # ============================================================
+        if decision["action"] == "create_servicenow_ticket":
+            outputs.append(
+                {
+                    "filename": fname,
+                    "status": "escalate",
+                    "reason": "External issue - ServiceNow ticket required",
+                    "analysis": analysis,
+                    "decision": decision,
+                    "knowledge_doc": doc,
+                    "original_code": original_code,
+                }
+            )
+            continue
+
+        # ============================================================
+        # CASE 3: DEFAULT → CREATE PR (flujo actual)
+        # ============================================================
         try:
             new_code = try_rule_based_full_rewrite(
                 filename=fname,
@@ -845,12 +922,14 @@ def prepare_modifications_for_failed_runs(
                 user_prompt=user_prompt,
                 logs=logs,
             )
+
             if new_code is None:
                 new_code = generate_fix_code_from_failure(
                     user_prompt=user_prompt,
                     code=original_code,
                     logs=logs,
                 )
+
         except Exception as e:
             outputs.append(
                 {
@@ -858,6 +937,8 @@ def prepare_modifications_for_failed_runs(
                     "status": "skipped",
                     "reason": f"Code generation failed: {e}",
                     "analysis": analysis,
+                    "decision": decision,
+                    "knowledge_doc": doc,
                 }
             )
             continue
@@ -871,6 +952,8 @@ def prepare_modifications_for_failed_runs(
                     "status": "skipped",
                     "reason": f"Generated code invalid: {e}",
                     "analysis": analysis,
+                    "decision": decision,
+                    "knowledge_doc": doc,
                 }
             )
             continue
@@ -887,6 +970,8 @@ def prepare_modifications_for_failed_runs(
                     "original_code": original_code,
                     "final_code": new_code,
                     "diff": "",
+                    "decision": decision,
+                    "knowledge_doc": doc,
                 }
             )
             continue
@@ -899,12 +984,14 @@ def prepare_modifications_for_failed_runs(
                 "original_code": original_code,
                 "final_code": new_code,
                 "diff": diff_text,
+                "decision": decision,
+                "knowledge_doc": doc,
             }
         )
+
         ready_count += 1
 
     return outputs
-
 
 # ============================================================
 # PR CREATION
@@ -914,23 +1001,36 @@ def create_prs_for_modifications(modifications: List[Dict[str, Any]]) -> List[Di
     created = []
 
     for mod in modifications:
-        if mod.get("status") != "ready":
+        status = mod.get("status")
+
+        if status == "ready":
             created.append(
-                {
-                    "filename": mod.get("filename"),
-                    "status": mod.get("status"),
-                    "pr_created": False,
-                }
+                create_pr_for_file(
+                    filename=mod["filename"],
+                    final_code=mod["final_code"],
+                    analysis=mod.get("analysis", ""),
+                    diff_text=mod.get("diff", ""),
+                )
+            )
+            continue
+
+        if status == "ready_new_flow":
+            created.append(
+                create_pr_for_new_file(
+                    filename=mod["filename"],
+                    final_code=mod["final_code"],
+                    analysis=mod.get("analysis", ""),
+                    diff_text=mod.get("diff", ""),
+                )
             )
             continue
 
         created.append(
-            create_pr_for_file(
-                filename=mod["filename"],
-                final_code=mod["final_code"],
-                analysis=mod.get("analysis", ""),
-                diff_text=mod.get("diff", ""),
-            )
+            {
+                "filename": mod.get("filename"),
+                "status": status,
+                "pr_created": False,
+            }
         )
 
     return created
@@ -1066,4 +1166,81 @@ def create_pr_for_new_file(
         "status": "pr_created",
         "pr_created": True,
         "pr_url": pr.json()["html_url"],
+    }
+
+def generate_new_flow_from_incident(
+    source_flow: str,
+    analysis: str,
+    logs: str,
+    flow_template: str = "",
+    business_doc: str = "",
+) -> Dict[str, Any]:
+    prompt = f"""
+You are an expert Prefect engineer.
+
+A failed source flow has been analyzed and the business layer decided that
+the correct remediation is to create a NEW corrective Prefect flow.
+
+Source flow:
+{source_flow}
+
+Suggested flow template / intent:
+{flow_template or "generic corrective flow"}
+
+Technical business documentation:
+\"\"\"text
+{business_doc}
+\"\"\"
+
+Analysis:
+\"\"\"text
+{truncate_text(analysis, MAX_LOG_CHARS)}
+\"\"\"
+
+Relevant logs:
+\"\"\"text
+{truncate_text(logs, MAX_LOG_CHARS)}
+\"\"\"
+
+Requirements:
+- Follow the business documentation strictly
+- If the documentation says CMDB updates must go through Boomi, use Boomi
+- Return a FULL working Python file
+- Must include @flow
+- Use @task if appropriate
+- Include logging
+- Use parameters where appropriate
+- No explanations outside JSON
+
+Return ONLY valid JSON with this exact schema:
+{{
+  "filename": "new_flow_name.py",
+  "code": "FULL PYTHON FILE CONTENT",
+  "summary": "short english summary"
+}}
+"""
+    
+    result = gemini_text(prompt)
+    data = safe_json_load(result)
+
+    filename = data.get("filename", "").strip()
+    code = data.get("code", "")
+    summary = data.get("summary", "").strip()
+
+    if not filename:
+        raise ValueError("Gemini did not return filename for generated corrective flow")
+    if not code.strip():
+        raise ValueError("Gemini did not return code for generated corrective flow")
+
+    filename = canonical_flow_filename(filename)
+    validate_python_code(code)
+
+    diff_text = f"--- /dev/null\n+++ {filename}\n"
+
+    return {
+        "filename": filename,
+        "status": "ready_new_flow",
+        "analysis": summary or f"Generated corrective flow for source flow {source_flow}",
+        "final_code": code,
+        "diff": diff_text,
     }

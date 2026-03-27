@@ -32,18 +32,18 @@ def dedupe_runs_by_flow_filename(runs: list) -> list:
 
     return deduped
 
+
 @flow
 def auto_fix_failed_flows_flow(
-    user_prompt: str = "Analyze recent failed Prefect flows and create pull requests for clearly code-related issues.",
+    user_prompt: str = "Analyze recent failed Prefect flows and create pull requests for clearly code-related issues. Respond ONLY in English.",
     lookback_min: int = LOOKBACK_MIN,
     max_runs: int = MAX_RUNS,
     max_prs: int = MAX_PRS_DEFAULT,
     create_prs: bool = True,
+    use_business_layer: bool = False,
 ) -> dict:
     logger = get_run_logger()
 
-    # Traemos una muestra amplia de runs fallidos para no sesgarnos
-    # por un flow muy ruidoso.
     failed_runs = get_failed_runs(
         lookback_min=lookback_min,
         max_runs=max_runs * 10,
@@ -60,35 +60,31 @@ def auto_fix_failed_flows_flow(
 
     logger.info(f"Initial failed runs fetched: {len(failed_runs)}")
 
-    # Nos quedamos solo con el último fallo por flow
     failed_runs = keep_latest_run_per_flow(failed_runs)
-
-    # Dedupe defensivo adicional por nombre de fichero
     failed_runs = dedupe_runs_by_flow_filename(failed_runs)
 
-    # Excluimos flows del propio sistema antes de llamar a Gemini
     failed_runs = [
-    r for r in failed_runs
-    if extract_filename_from_entrypoint(
-    r.get("deployment_entrypoint", "UNKNOWN")
-    ) not in {
-    "auto_fix_failed_flows_flow.py",
-    "modify_flow_with_pr_flow.py",
-    "report_failures_flow.py",
-    "ai_prefect_common.py",
-    }
+        r for r in failed_runs
+        if extract_filename_from_entrypoint(
+            r.get("deployment_entrypoint", "UNKNOWN")
+        ) not in {
+            "auto_fix_failed_flows_flow.py",
+            "modify_flow_with_pr_flow.py",
+            "report_failures_flow.py",
+            "ai_prefect_common.py",
+        }
     ]
 
-    # Limitamos número de flows
     failed_runs = failed_runs[:max_runs]
 
     candidate_flows = sorted({
-    extract_filename_from_entrypoint(r.get("deployment_entrypoint", "UNKNOWN"))
-    for r in failed_runs
-    if extract_filename_from_entrypoint(r.get("deployment_entrypoint", "UNKNOWN"))
+        extract_filename_from_entrypoint(r.get("deployment_entrypoint", "UNKNOWN"))
+        for r in failed_runs
+        if extract_filename_from_entrypoint(r.get("deployment_entrypoint", "UNKNOWN"))
     })
-    
+
     logger.info(f"Autofix candidate flows after dedup: {candidate_flows}")
+    logger.info(f"Business layer enabled: {use_business_layer}")
 
     if not failed_runs:
         return {
@@ -113,14 +109,22 @@ def auto_fix_failed_flows_flow(
         user_prompt=user_prompt,
         runs_to_modify=failed_runs,
         max_prs=max_prs,
+        use_business_layer=use_business_layer,
     )
 
     for mod in modifications:
         logger.info(
             f"MOD RESULT -> flow={mod.get('filename')} "
             f"status={mod.get('status')} "
-            f"reason={mod.get('reason')}"
+            f"reason={mod.get('reason')} "
+            f"decision={mod.get('decision')}"
         )
+
+        if use_business_layer and mod.get("knowledge_doc"):
+            logger.info(
+                f"KNOWLEDGE DOC GENERATED -> flow={mod.get('filename')}\n"
+                f"{mod.get('knowledge_doc')}"
+            )
 
     if not create_prs:
         logger.info("Auto-fix analysis completed without PR creation.")
@@ -138,11 +142,13 @@ def auto_fix_failed_flows_flow(
     ready_count = len([m for m in modifications if m.get("status") == "ready"])
     skipped_count = len([m for m in modifications if m.get("status") == "skipped"])
     no_changes_count = len([m for m in modifications if m.get("status") == "no_changes"])
+    escalated_count = len([m for m in modifications if m.get("status") == "escalate"])
 
     logger.info(
         f"Auto-fix finished. selected_flows={len(selected_flows)}, "
         f"ready={ready_count}, no_changes={no_changes_count}, "
-        f"skipped={skipped_count}, prs_created={created_count}"
+        f"skipped={skipped_count}, escalated={escalated_count}, "
+        f"prs_created={created_count}"
     )
 
     return {

@@ -1,0 +1,15 @@
+[
+  {
+    "match": "cmdb",
+    "type": "data",
+    "action": "create_flow",
+    "flow_template": "fix_cmdb_flow.py",
+    "doc_file": "cmdb_boomi_integration.md"
+  },
+  {
+    "match": "http 404",
+    "type": "external",
+    "action": "create_servicenow_ticket",
+    "assignment_group": "NETWORK_TEAM"
+  }
+]
