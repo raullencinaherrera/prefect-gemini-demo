@@ -18,6 +18,7 @@ ERRORS = [
     "Unexpected null response",
 ]
 
+
 @task
 def load_single_device(device: str):
     logger = get_run_logger()
@@ -47,10 +48,17 @@ def load_devices_batch():
     # Esperar todos
     results = [r.result() for r in results]
 
-    # Si algún device falló → fallo el flow
+    # Si algún device falló → registrar, pero no fallar el flow
     any_failed = any(r["status"] == "FAILED" for r in results)
 
     if any_failed:
         failed_devices = [r["device"] for r in results if r["status"] == "FAILED"]
-        logger.error(f"Flow failed due to failing devices: {failed_devices}")
-        raise Exception(f"Device load failures: {failed_devices}")
+        # Log the failures, but do not raise an exception so the flow can complete
+        # and allow for subsequent analysis/PR creation.
+        logger.error(f"Some devices failed to load: {failed_devices}")
+    else:
+        logger.info("All devices loaded successfully.")
+
+    # The flow now completes successfully even if some devices fail,
+    # allowing downstream tasks to process the results and potentially
+    # create PRs based on the 'FAILED' statuses.
