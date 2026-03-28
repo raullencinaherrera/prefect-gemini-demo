@@ -6,6 +6,9 @@ DEVICES = [
     "router-01", "router-02", "router-23",
     "switch-05", "switch-11", "switch-42",
     "fw-01", "fw-02",
+    # New computers with funny names
+    "PC-Sir-Clicks-A-Lot", "Laptop-Sparkle-Bottom", "Server-MegaTron-5000",
+    "Desktop-Captain-Crash", "Workstation-Byte-Me-Baby",
 ]
 
 # Posibles errores aleatorios
