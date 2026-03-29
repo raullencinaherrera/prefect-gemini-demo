@@ -1,4 +1,5 @@
 from prefect import flow, task, get_run_logger
+from prefect.states import Failed # Import Failed state
 import random
 
 # Lista de dispositivos simulados
@@ -56,4 +57,7 @@ def load_devices_batch():
     if any_failed:
         failed_reasons = [r["reason"] for r in results if r["status"] == "FAILED"]
         logger.error(f"Flow failed due to device load errors: {failed_reasons}")
-        raise Exception(f"Device load failures: {failed_reasons}")
+        # Instead of raising a Python Exception that halts the process,
+        # return a Prefect Failed state to gracefully mark the flow run as failed
+        # while ensuring the flow completes its execution context.
+        return Failed(message=f"Device load failures: {failed_reasons}")
