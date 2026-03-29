@@ -1,11 +1,18 @@
 from prefect import flow, task, get_run_logger
 import urllib.request
+import ssl # Import the ssl module
 
 @task
 def pull_nonexistent_url():
     # Esto debe provocar HTTPError: 404 Not Found
     url = "https://httpbin.org/status/404"
-    with urllib.request.urlopen(url) as resp:
+    # Create an unverified SSL context to bypass certificate verification.
+    # This is done to address the SSLCertVerificationError.
+    # WARNING: Bypassing SSL verification can be a security risk and should
+    # be done with caution, primarily for testing or in environments where
+    # certificate verification is known to be problematic and trust is otherwise established.
+    ctx = ssl._create_unverified_context()
+    with urllib.request.urlopen(url, context=ctx) as resp:
         return resp.read().decode("utf-8")
 
 @flow
