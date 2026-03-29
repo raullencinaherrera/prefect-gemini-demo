@@ -6,6 +6,10 @@ DEVICES = [
     "router-01", "router-02", "router-23",
     "switch-05", "switch-11", "switch-42",
     "fw-01", "fw-02",
+    # Nuevos dispositivos de tipo "computer" con nombres divertidos
+    "computer-HAL9000", "computer-DeepThought", "computer-Skynet",
+    "computer-BenderBendingRodriguez", "computer-OptimusPrime",
+    "computer-Johnny5", "computer-TARDIS"
 ]
 
 # Posibles errores aleatorios
