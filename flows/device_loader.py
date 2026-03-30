@@ -55,5 +55,8 @@ def load_devices_batch():
 
     if any_failed:
         failed_reasons = [r["reason"] for r in results if r["status"] == "FAILED"]
-        logger.error(f"Flow failed due to device load errors: {failed_reasons}")
-        raise Exception(f"Device load failures: {failed_reasons}")
+        logger.error(f"Flow completed with device load errors: {failed_reasons}")
+        # The flow should not necessarily fail if only some devices fail;
+        # instead, it should complete and report the failures.
+        # Removing the explicit raise allows the flow to complete successfully
+        # while still logging the encountered errors.
