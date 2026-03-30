@@ -49,11 +49,18 @@ def load_devices_batch():
         r = load_single_device.submit(dev)
         results.append(r)
 
+    # Await all task results
     results = [r.result() for r in results]
 
     any_failed = any(r["status"] == "FAILED" for r in results)
 
     if any_failed:
         failed_reasons = [r["reason"] for r in results if r["status"] == "FAILED"]
-        logger.error(f"Flow failed due to device load errors: {failed_reasons}")
-        raise Exception(f"Device load failures: {failed_reasons}")
+        # Log the failures but allow the flow to complete its execution
+        # instead of raising an exception, which would mark the entire flow run as failed.
+        logger.error(f"Flow completed with device load errors: {failed_reasons}")
+    else:
+        logger.info("All devices loaded successfully.")
+
+    # Optionally, you might want to return the results for downstream processing.
+    return results
