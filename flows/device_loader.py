@@ -6,6 +6,7 @@ DEVICES = [
     "router-01", "router-02", "router-23",
     "switch-05", "switch-11", "switch-42",
     "fw-01", "fw-02",
+    "toaster-of-doom", "furball-finder", "sock-gobbler-3000", "caffeine-dispenser-mkII"
 ]
 
 # Posibles errores aleatorios
