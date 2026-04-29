@@ -73,7 +73,7 @@ services:
         condition: service_healthy
     environment:
       PREFECT_API_URL: http://prefect-server:4200/api
-      GEMINI_API_KEY: AIzaSyCNgS15LRdkJ9PntbzHiAmfthH_U8LfhBg
+      GEMINI_API_KEY: 
     command: >
       prefect worker start
       --pool local-pool
